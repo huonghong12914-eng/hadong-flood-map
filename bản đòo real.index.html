@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bản đồ chống ngập – Hà Đông / Flood Map – Hà Đông</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* HEADER */
+    .top-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: linear-gradient(90deg, #0057b8, #00b4db);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 1002;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .logo {
+      width: 32px; height: 32px;
+      background: #fff;
+      border-radius: 6px;
+      margin-right: 10px;
+    }
+    .titles { display: flex; flex-direction: column; }
+    .title-main { font-size: 15px; font-weight: 600; }
+    .title-sub { font-size: 12px; opacity: 0.9; }
+    .top-right .badge {
+      background: rgba(255,255,255,0.18);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      border: 1px solid rgba(255,255,255,0.5);
+    }
+
+    /* MAP WRAPPER (để nghiêng 3D) */
+    #map-wrapper {
+      position: absolute;
+      top: 56px;
+      left: 0;
+      width: 100vw;
+      height: calc(100vh - 56px);
+      transform-style: preserve-3d;
+      transform-origin: center bottom;
+      transition: transform 0.5s ease;
+      z-index: 1;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    /* Khi bật 3D */
+    #map-wrapper.tilt-3d {
+      transform: perspective(1200px) rotateX(55deg) scale(0.9);
+    }
+
+    /* LEGEND + FILTER + BUTTONS */
+    .legend, .filter-bar, .qr-card, .bottom-footer, .view-toggle, .label-toggle {
+      position: absolute;
+      z-index: 1001;
+      font-size: 13px;
+    }
+
+    .legend, .filter-bar {
+      background: #fff;
+      padding: 8px 10px;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .legend { top: 66px; left: 10px; }
+    .filter-bar { top: 66px; right: 10px; }
+
+    .legend-item { display: flex; align-items: center; margin-bottom: 3px; }
+    .legend-color {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .view-toggle, .label-toggle {
+      top: 66px;
+      left: 220px;
+      background: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .label-toggle {
+      top: 110px;
+    }
+
+    /* QR CARD */
+    .qr-card {
+      right: 10px;
+      bottom: 60px;
+      width: 160px;
+      background: rgba(255,255,255,0.96);
+      border-radius: 8px;
+      padding: 6px 8px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .qr-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+    .qr-img { width: 100%; border-radius: 4px; margin-bottom: 4px; }
+    .qr-text { font-size: 11px; color: #444; }
+
+    /* FOOTER */
+    .bottom-footer {
+      bottom: 6px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    /* CUSTOM MARKER ICON (emoji + màu AI) */
+    .custom-marker {
+      background: transparent;
+      border: none;
+    }
+    .custom-marker-inner {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 15px;
+      border: 2px solid #fff;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="top-bar">
+  <img src="" class="logo" alt="Logo">
+  <div class="titles">
+    <div class="title-main">
+      💧 5 NGÀY – 1 BẢN ĐỒ – HÀ ĐÔNG KHÔNG NGẬP / 5 DAYS – 1 MAP – A FLOOD-FREE HÀ ĐÔNG
+    </div>
+    <div class="title-sub">
+      Bản đồ cộng đồng · Dữ liệu công dân · AI phân tích realtime /
+      Community map · Citizen data · AI realtime analysis
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="badge">Hà Đông · Thử nghiệm / Pilot</span>
+  </div>
+</div>
+
+<!-- MAP WRAPPER + MAP -->
+<div id="map-wrapper">
+  <div id="map"></div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div><b>AI – Mức nguy cơ / Risk level</b></div>
+  <div class="legend-item">
+    <span class="legend-color" style="background:#d32f2f;"></span> Cao / High
+  </div>
+  <div class="legend-item">
+    <span class="legend-color" style="background:#f9a825;"></span> Trung bình / Medium
+  </div>
+  <div class="legend-item">
+    <span class="legend-color" style="background:#388e3c;"></span> Thấp / Low
+  </div>
+</div>
+
+<!-- FILTER -->
+<div class="filter-bar">
+  <label for="dayFilter">Lọc theo ngày / Filter by day:</label>
+  <select id="dayFilter">
+    <option value="all">Tất cả / All</option>
+    <option value="day1">Day 1 – Drain check</option>
+    <option value="day2">Day 2 – Flood-prone point</option>
+    <option value="day3">Day 3 – Watermark</option>
+    <option value="day4">Day 4 – Trash blocking drains</option>
+    <option value="day5">Day 5 – Alerts & community</option>
+  </select>
+</div>
+
+<!-- NÚT 2D / 3D -->
+<div class="view-toggle" id="viewToggle">2D / 3D</div>
+
+<!-- NÚT BẬT/TẮT TÊN ĐƯỜNG -->
+<div class="label-toggle" id="labelToggle">Tên đường: OFF</div>
+
+<!-- QR FORM -->
+<div class="qr-card">
+  <div class="qr-title">Tham gia báo cáo / Send a report</div>
+  <a href="https://docs.google.com/forms/d/1Rm0ezxrbcR2OuqS0nS80ISofDvrUDyQP-92x9pC2Cws/viewform" target="_blank">
+    <img
+      class="qr-img"
+      src="https://drive.google.com/uc?export=view&id=1AwC4_6J9VQ3IFahPsv0muBsX6D8-H760"
+      alt="QR Form"
+    >
+  </a>
+  <div class="qr-text">
+    Quét QR hoặc nhấn để mở Form<br>
+    Scan QR or tap to open the form
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="bottom-footer">
+  Made with 💙 bởi cộng đồng Hà Đông / Made with 💙 by Hà Đông community
+</div>
+
+<script>
+  // FIREBASE CONFIG
+  const firebaseConfig = {
+    apiKey: "AIzaSyC8ToijVmLAI-MFXTqgSc1Eese0-hdb9HU",
+    authDomain: "bluecity-ffd6b.firebaseapp.com",
+    databaseURL: "https://bluecity-ffd6b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "bluecity-ffd6b",
+    storageBucket: "bluecity-ffd6b.firebasestorage.app",
+    messagingSenderId: "203292866028",
+    appId: "1:203292866028:web:5f8d1e2d94b0cd10403cc9"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // MAP – SATELLITE
+  const map = L.map("map").setView([20.959, 105.77], 14);
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      maxZoom: 20,
+      attribution: "Tiles © Esri – Maxar"
+    }
+  ).addTo(map);
+
+  // LAYER TÊN ĐƯỜNG (LABELS)
+  const streetLabels = L.tileLayer(
+    "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
+    {
+      maxZoom: 20,
+      attribution: "© CARTO"
+    }
+  );
+
+  // HÀM GIỚI HẠN HÀ ĐÔNG
+  function inHaDong(lat, lng) {
+    if (lat == null || lng == null) return false;
+    const minLat = 20.93, maxLat = 21.00;
+    const minLng = 105.74, maxLng = 105.82;
+    return (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng);
+  }
+
+  // LẤY DAY TAG TỪ typeCode
+  function getDayTag(report) {
+    const code = (report.typeCode || "").toUpperCase();
+    if (code === "D1_DRAIN_CHECK") return "day1";
+    if (code === "D2_FLOOD_POINT") return "day2";
+    if (code === "D3_WATERMARK")   return "day3";
+    if (code === "D4_TRASH_BLOCK") return "day4";
+    if (code === "D5_COMMUNITY")   return "day5";
+    return "other";
+  }
+
+  // AI RISK ANALYSIS
+  function analyzeReport(report) {
+    const now = Date.now();
+    const ts = report.timestamp || now;
+    const ageHours = (now - ts) / (1000 * 60 * 60);
+    const desc = (report.desc || "").toLowerCase();
+
+    const dayTag = getDayTag(report);
+
+    let score = 0;
+    // Theo loại
+    if (dayTag === "day2") score += 3;       // Flood point
+    if (dayTag === "day4") score += 2;       // Trash blocking
+    if (dayTag === "day3") score += 1;       // Watermark
+
+    // Theo mô tả
+    const descHigh = ["đầu gối", "chết máy", "ngập sâu", "nửa bánh", "không đi được"];
+    const descMedium = ["ngập nhẹ", "đọng nước", "nước tràn", "nước chảy"];
+
+    descHigh.forEach(k => { if (desc.includes(k)) score += 3; });
+    descMedium.forEach(k => { if (desc.includes(k)) score += 1; });
+
+    // Theo độ mới
+    if (ageHours <= 3)       score += 3;
+    else if (ageHours <= 24) score += 2;
+    else if (ageHours <= 72) score += 1;
+
+    let risk = "low";
+    if (score >= 6) risk = "high";
+    else if (score >= 3) risk = "medium";
+
+    let label = "Nguy cơ thấp / Low risk";
+    if (risk === "medium") label = "Nguy cơ trung bình / Medium risk";
+    if (risk === "high")   label = "Nguy cơ cao / High risk";
+
+    const earlyWarning = (risk === "high" && ageHours <= 3);
+
+    return {
+      risk,
+      label,
+      score,
+      ageHours,
+      dayTag,
+      earlyWarning
+    };
+  }
+
+  // MÀU THEO RISK
+  function riskColor(risk) {
+    if (risk === "high") return "#d32f2f";
+    if (risk === "medium") return "#f9a825";
+    return "#388e3c";
+  }
+
+  // EMOJI THEO NGÀY
+  function dayEmoji(dayTag) {
+    if (dayTag === "day1") return "🧹"; // Drain check
+    if (dayTag === "day2") return "💧"; // Flood point
+    if (dayTag === "day3") return "📏"; // Watermark
+    if (dayTag === "day4") return "🗑️"; // Trash blocking
+    if (dayTag === "day5") return "📣"; // Alerts & community
+    return "•";
+  }
+
+  // ICON TÙY BIẾN: màu theo risk + emoji theo day
+  function createMarkerIcon(dayTag, risk) {
+    const color = riskColor(risk);
+    const emoji = dayEmoji(dayTag);
+    return L.divIcon({
+      className: "custom-marker",
+      html: `<div class="custom-marker-inner" style="background:${color};">${emoji}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -13]
+    });
+  }
+
+  let allReports = {};
+  let markers = [];
+  const dayFilterSelect = document.getElementById("dayFilter");
+
+  function clearMarkers() {
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+  }
+
+  function renderReports() {
+    clearMarkers();
+    const selectedDay = dayFilterSelect.value;
+    const keys = Object.keys(allReports);
+
+    keys.forEach(key => {
+      const r = allReports[key];
+      if (!r || r.lat == null || r.lng == null) return;
+      if (!inHaDong(r.lat, r.lng)) return;
+
+      const analysis = analyzeReport(r);
+
+      // Lọc theo day
+      if (selectedDay !== "all" && analysis.dayTag !== selectedDay) return;
+
+      const icon = createMarkerIcon(analysis.dayTag, analysis.risk);
+
+      const marker = L.marker([r.lat, r.lng], { icon }).addTo(map);
+
+      const timeStr = r.timestamp
+        ? new Date(r.timestamp).toLocaleString("vi-VN")
+        : "Không rõ / Unknown";
+
+      const imageHtml = r.image
+        ? `<img src="${r.image}" alt="Ảnh báo cáo" style="max-width:200px; border-radius:4px; margin:4px 0;">`
+        : "";
+
+      const earlyWarnHtml = analysis.earlyWarning
+        ? `<p style="color:#d32f2f;"><b>⚠ Cảnh báo sớm / Early warning:</b> Khu vực có nguy cơ ngập cao trong vài giờ tới / High flood risk in the next few hours.</p>`
+        : "";
+
+      const popupHtml = `
+        <b>${r.type || "Báo cáo / Report"}</b><br/>
+        <i>${timeStr}</i><br/><br/>
+        ${r.desc || ""}<br/><br/>
+        <b>Vị trí / Location:</b> ${r.locationText || ""}<br/><br/>
+        ${imageHtml}
+        <hr/>
+        <b>AI:</b> ${analysis.label}<br/>
+        <small>
+          Điểm / Score: ${analysis.score.toFixed(1)} –
+          Tuổi dữ liệu / Data age: ${analysis.ageHours.toFixed(1)} giờ / hours –
+          Ngày chiến dịch / Campaign day: ${analysis.dayTag.toUpperCase()}
+        </small>
+        ${earlyWarnHtml}
+      `;
+
+      marker.bindPopup(popupHtml);
+      markers.push(marker);
+    });
+
+    // Zoom đến điểm đầu tiên trong Hà Đông (nếu có)
+    const firstKey = keys.find(k => {
+      const r = allReports[k];
+      return r && r.lat != null && r.lng != null && inHaDong(r.lat, r.lng);
+    });
+    if (firstKey) {
+      const r = allReports[firstKey];
+      map.setView([r.lat, r.lng], 15);
+    }
+  }
+
+  dayFilterSelect.addEventListener("change", renderReports);
+
+  // FIREBASE REALTIME
+  db.ref("reports").on("value", snap => {
+    allReports = snap.val() || {};
+    console.log("Firebase data:", allReports);
+    renderReports();
+  });
+
+  // 2D / 3D TOGGLE
+  const mapWrapper = document.getElementById("map-wrapper");
+  const viewToggleBtn = document.getElementById("viewToggle");
+  let is3D = false;
+  viewToggleBtn.addEventListener("click", () => {
+    is3D = !is3D;
+    if (is3D) {
+      mapWrapper.classList.add("tilt-3d");
+      viewToggleBtn.textContent = "Đang xem 3D / Viewing 3D";
+    } else {
+      mapWrapper.classList.remove("tilt-3d");
+      viewToggleBtn.textContent = "2D / 3D";
+    }
+  });
+
+  // LABELS TOGGLE (tên đường)
+  const labelToggleBtn = document.getElementById("labelToggle");
+  let labelsOn = false;
+  labelToggleBtn.addEventListener("click", () => {
+    labelsOn = !labelsOn;
+    if (labelsOn) {
+      streetLabels.addTo(map);
+      labelToggleBtn.textContent = "Tên đường: ON";
+    } else {
+      map.removeLayer(streetLabels);
+      labelToggleBtn.textContent = "Tên đường: OFF";
+    }
+  });
+</script>
+
+</body>
+</html>
